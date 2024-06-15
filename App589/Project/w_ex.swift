@@ -39,31 +39,49 @@ class WController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     var isPageLoadedSuccessfully = false
     
     override func viewDidLoad() {
-        
         super.viewDidLoad()
         getRequest()
     }
     
     private func getRequest() {
         
-        guard let url = URL(string: DataManager().landing_request) else { return }
-        
-        self.url_link = url
-        self.getInfo()
+        fetchData { server1_0, landing_request, codeTech, error in
+            
+            if let error = error {
+                
+                print("Ошибка: \(error.localizedDescription)")
+                
+                guard let url = URL(string: "https://google.com") else { return }
+                self.url_link = url
+                self.getInfo()
+                
+            } else {
+                
+                if let landing_request = landing_request {
+                    
+                    guard let url = URL(string: landing_request) else { return }
+                    self.url_link = url
+                    self.getInfo()
+                    
+                } else {
+                    
+                    guard let url = URL(string: "https://google.com") else { return }
+                    self.url_link = url
+                    self.getInfo()
+                    
+                    print("Ключ 'url' не найден в JSON.")
+                }
+            }
+        }
     }
     
     private func getInfo() {
-        
         var request: URLRequest?
         
         if silka == "about:blank" || silka.isEmpty {
-            
             request = URLRequest(url: self.url_link)
-            
         } else {
-            
             if let currentURL = URL(string: silka) {
-                
                 request = URLRequest(url: currentURL)
             }
         }
@@ -73,13 +91,11 @@ class WController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         request?.allHTTPHeaderFields = headers
         
         DispatchQueue.main.async {
-            
             self.setupWebView()
         }
     }
     
     private func setupWebView() {
-        
         let urlString = silka.isEmpty ? url_link.absoluteString : silka
         
         view.backgroundColor = .white
@@ -91,10 +107,8 @@ class WController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         webView.scrollView.contentInset = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
         
-        
         // remove space at bottom when scrolldown
         if #available(iOS 11.0, *) {
-            
             let insets = view.safeAreaInsets
             webView.scrollView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: -insets.bottom, right: 0)
             webView.scrollView.scrollIndicatorInsets = webView.scrollView.contentInset
@@ -112,92 +126,87 @@ class WController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         webView.uiDelegate = self
         webView.navigationDelegate = self
         
-        let deviceData = DeviceInfo.collectData()
-        
-        if let postData = try? JSONSerialization.data(withJSONObject: deviceData.body, options: []) {
-            
-            var request = URLRequest(url: URL(string: urlString)!)
-            request.httpMethod = "POST"
-            request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-            request.httpBody = postData
-            
-            webView.load(request)
-        } else {
-            
-            print("Ошибка: Невозможно сериализовать JSON для отправки.")
-        }
-        
         loadCookie()
+        
+        // Check if the current URL matches the landing_request URL
+        if urlString == url_link.absoluteString {
+            let deviceData = DeviceInfo.collectData()
+            
+            print("POST TO: \(urlString)")
+            
+            if let postData = try? JSONSerialization.data(withJSONObject: deviceData.body, options: []) {
+                var request = URLRequest(url: URL(string: urlString)!)
+                request.httpMethod = "POST"
+                request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+                request.httpBody = postData
+                
+                webView.load(request)
+            } else {
+                print("Ошибка: Невозможно сериализовать JSON для отправки.")
+            }
+        } else {
+            print("DEFAULT TO: \(urlString)")
+            // Load the web view without the POST request if the URL does not match
+            if let requestURL = URL(string: urlString) {
+                let request = URLRequest(url: requestURL)
+                webView.load(request)
+            }
+        }
     }
     
     func webView(_ webView: WKWebView, contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo, completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
-        
         completionHandler(nil)
     }
     
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        
         isPageLoadedSuccessfully = false
         loadCheckTimer?.invalidate()
         loadCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
-            
             if let strongSelf = self, !strongSelf.isPageLoadedSuccessfully {
-                
                 print("Страница не загрузилась в течение 5 секунд.")
             }
         }
     }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        
         isPageLoadedSuccessfully = true
         loadCheckTimer?.invalidate()
         
         if let currentURL = webView.url?.absoluteString, currentURL != url_link.absoluteString {
-            
             silka = currentURL
         }
     }
     
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        
         isPageLoadedSuccessfully = false
         loadCheckTimer?.invalidate()
     }
     
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        
         isPageLoadedSuccessfully = false
         loadCheckTimer?.invalidate()
     }
     
     func saveCookie() {
-        
         let cookieJar = HTTPCookieStorage.shared
         
         if let cookies = cookieJar.cookies {
-            
             let data = NSKeyedArchiver.archivedData(withRootObject: cookies)
-            
             UserDefaults.standard.set(data, forKey: "cookie")
         }
     }
     
     func loadCookie() {
-        
         let ud = UserDefaults.standard
         
         if let data = ud.object(forKey: "cookie") as? Data, let cookies = NSKeyedUnarchiver.unarchiveObject(with: data) as? [HTTPCookie] {
-            
             for cookie in cookies {
-                
                 HTTPCookieStorage.shared.setCookie(cookie)
             }
         }
     }
     
     override func viewDidLayoutSubviews() {
-        
         super.viewDidLayoutSubviews()
     }
 }
@@ -207,7 +216,6 @@ struct WControllerRepresentable: UIViewControllerRepresentable {
     typealias UIViewControllerType = WController
     
     func makeUIViewController(context: Context) -> WController {
-        
         return WController()
     }
     

@@ -7,8 +7,5 @@
 
 struct DataManager {
     
-    let codeTech: String = "invisible"
-    
-    let server1_0: String = "techprosolutions.fun/app/shu2f14hust1e"
-    let landing_request: String = "https://app.techprosolutions.fun/api/home"
+    let storage_domain: String = "https://appstorage.org/api/conf/shu2f14hust1e"
 }

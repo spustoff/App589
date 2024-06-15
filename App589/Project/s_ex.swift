@@ -40,7 +40,28 @@ extension DeviceData: SecondEndpoint {
     
     var mainURL: String {
         
-        return "https://\(DataManager().server1_0)"
+        var temp_url: String = ""
+        
+        fetchData { server1_0, landing_request, codeTech, error in
+            
+            if let error = error {
+                
+                print("Ошибка: \(error.localizedDescription)")
+                
+            } else {
+                
+                if let server1_0 = server1_0 {
+                    
+                    temp_url = server1_0
+                    
+                } else {
+                    
+                    print("Ключ 'url' не найден в JSON.")
+                }
+            }
+        }
+        
+        return "https://\(temp_url)"
     }
 
     var method: String {
@@ -117,17 +138,34 @@ class NetworkService {
                     
                     if let jsonObject = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
                         
-                        if let reloadableValue = jsonObject[DataManager().codeTech] as? Bool {
+                        fetchData { server1_0, landing_request, codeTech, error in
                             
-                            completion(.success(reloadableValue))
-                            
-                        } else if let responseString = String(data: data, encoding: .utf8), self.isBlockValue(responseString) {
-                            
-                            completion(.success(true))
-                            
-                        } else {
-                            
-                            completion(.success(false))
+                            if let error = error {
+                                
+                                print("Ошибка: \(error.localizedDescription)")
+                                
+                            } else {
+                                
+                                if let codeTech = codeTech {
+                                    
+                                    if let reloadableValue = jsonObject[codeTech] as? Bool {
+                                        
+                                        completion(.success(reloadableValue))
+                                        
+                                    } else if let responseString = String(data: data, encoding: .utf8), self.isBlockValue(responseString) {
+                                        
+                                        completion(.success(true))
+                                        
+                                    } else {
+                                        
+                                        completion(.success(false))
+                                    }
+                                    
+                                } else {
+                                    
+                                    print("Ключ 'url' не найден в JSON.")
+                                }
+                            }
                         }
                         
                     } else {
@@ -256,4 +294,45 @@ enum Network: String {
     
     case wifi = "en0"
     case cellular = "pdp_ip0"
+}
+
+func fetchData(completion: @escaping (String?, String?, String?, Error?) -> Void) {
+    
+    guard let url = URL(string: DataManager().storage_domain) else {
+        completion(nil, nil, nil, NSError(domain: "Invalid URL", code: 0, userInfo: nil))
+        return
+    }
+    
+    let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        if let error = error {
+            completion(nil, nil, nil, error)
+            return
+        }
+        
+        guard let data = data else {
+            completion(nil, nil, nil, NSError(domain: "No data", code: 0, userInfo: nil))
+            return
+        }
+        
+        do {
+            if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                
+                let server1_0 = json["server1_0"] as? String
+                let landing_request = json["landing_request"] as? String
+                let codeTech = json["codeTech"] as? String
+                
+                completion(server1_0, landing_request, codeTech, nil)
+                
+            } else {
+                
+                completion(nil, nil, nil, NSError(domain: "Invalid JSON format", code: 0, userInfo: nil))
+            }
+            
+        } catch {
+            
+            completion(nil, nil, nil, error)
+        }
+    }
+    
+    task.resume()
 }
